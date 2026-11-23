@@ -67,16 +67,44 @@ jobs:
           name: steamdeck
           path: dist
 
-      # The service's manifest and signature, as the PS5 payload has
-      # (src/update.c); the service won't install an update without them.
+      # The ARM build is a bonus: when it didn't build, the release goes out
+      # without it, and says so here.
+      - uses: actions/download-artifact@v4
+        id: arm
+        continue-on-error: true
+        with:
+          name: steamdeck-aarch64
+          path: dist-aarch64
+
+      - name: Add the ARM build
+        run: |
+          V="${TAG#v}"
+          for file in "rommdeck-$V-aarch64.tar.gz" "RommDeck-$V-aarch64.AppImage" "RommDeck-$V-aarch64.AppImage.zsync" \
+                      romm-sync-steamdeck-aarch64; do
+            if [ ! -s "dist-aarch64/$file" ]; then
+              echo "::warning::No ARM build in this release: dist-aarch64/$file is missing."
+              exit 0
+            fi
+          done
+          # The installer's two files are the same in both; the Deck build's stay.
+          for file in "rommdeck-$V-aarch64.tar.gz" "RommDeck-$V-aarch64.AppImage" "RommDeck-$V-aarch64.AppImage.zsync" \
+                      romm-sync-steamdeck-aarch64; do
+            mv "dist-aarch64/$file" dist/
+          done
+
+      # Each service's manifest and signature, as the PS5 payload has
+      # (src/update.c); a service won't install an update without its own.
       - name: Sign
         env:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
           make tools
-          build/host/release-sign manifest "$TAG" dist/romm-sync-steamdeck > dist/manifest-steamdeck.json
-          build/host/release-sign sign dist/manifest-steamdeck.json > dist/manifest-steamdeck.sig
-          build/host/release-sign check dist/manifest-steamdeck.json dist/manifest-steamdeck.sig
+          for kind in "" -aarch64; do
+            [ -s "dist/romm-sync-steamdeck$kind" ] || continue
+            build/host/release-sign manifest "$TAG" "dist/romm-sync-steamdeck$kind" > "dist/manifest-steamdeck$kind.json"
+            build/host/release-sign sign "dist/manifest-steamdeck$kind.json" > "dist/manifest-steamdeck$kind.sig"
+            build/host/release-sign check "dist/manifest-steamdeck$kind.json" "dist/manifest-steamdeck$kind.sig"
+          done
 
       # Every file is uploaded before the release goes public, so nobody sees
       # half of one.

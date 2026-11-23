@@ -7,8 +7,13 @@
 # in https://github.com/s0liton/RommPS, which runs this same script on the same
 # copy before it lets a change in.
 #
-# The packages end up as the artifact "steamdeck"; this workflow never touches
-# a release.
+# Twice: for the Deck (x86_64), and for ARM handhelds (aarch64) on GitHub's ARM
+# machines, so nothing is emulated. The ARM build is a bonus: nobody here has
+# such a device, so it may fail without failing the rest, and a release then
+# goes out without it (release.yml).
+#
+# The packages end up as the artifacts "steamdeck" and "steamdeck-aarch64";
+# this workflow never touches a release.
 name: Build
 
 on:
@@ -29,7 +34,21 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            artifact: steamdeck
+            bonus: false
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            artifact: steamdeck-aarch64
+            bonus: true
+    name: build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.bonus }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -50,8 +69,8 @@ jobs:
           context: platform/steamdeck/app/docker
           tags: ${{ steps.image.outputs.image }}
           load: true
-          cache-from: type=gha,scope=steamdeck
-          cache-to: type=gha,mode=max,scope=steamdeck,ignore-error=true
+          cache-from: type=gha,scope=${{ matrix.artifact }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.artifact }},ignore-error=true
 
       - name: Build, test and package
         env:
@@ -60,6 +79,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: steamdeck
+          name: ${{ matrix.artifact }}
           path: build/steamdeck/release/
           if-no-files-found: error
