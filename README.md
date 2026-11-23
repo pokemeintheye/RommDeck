@@ -35,8 +35,7 @@ A [RomM](https://romm.app) companion client for the Steam Deck based on my clien
 - RomM 5.2.0 or newer (may work on older versions)
 - Whichever other emulators you want
   
-## Install
-
+## Install on Steam Deck
 Grab everything from the [releases page](https://github.com/s0liton/RommDeck/releases), in Desktop Mode. Pick one:
 
 ### Installer
@@ -55,17 +54,18 @@ Grab everything from the [releases page](https://github.com/s0liton/RommDeck/rel
   ```
 - That installs RommDeck in `~/.local/share/rommdeck`, adds it to the app menu, and (with `--steam`) to your Steam library. Steam closes for a moment while it does, it's the only way Steam lets anyone touch its shortcuts.
 
-### Updates
+## Install on ARM Handhelds
+As a pretty universal Linux application, RommDeck technically can run on much more than just the Steam Deck. The biggest limitation was that it was X86 only. I have now started building an ARM version of RommDeck for use with any other Linux-powered ARM devices. Since I do not own any ARM based devices, my testing comes from the community, so expect that there may be gremlins such as not fitting on screen properly or even system path issues. If you encounter any, open an issue with logs and your device model, and I can work on it.
+
+## Updates
 - **Installer:** run it again and pick **Update**.
 - **AppImage:** run the new one, it updates the background service on launch. Gear Lever or AppImageUpdate can update it in place too.
 - **Tarball:** extract the new one and run `./install.sh` again.
 
-Your settings and pairing (`~/.local/share/romm-sync`) stay put either way.
-
-### Uninstall
+## Uninstall
 Run the installer and pick **Uninstall**. It asks before it removes your settings and pairing. Remove the Steam shortcut by hand if you installed some other way.
 
-### How it Works
+## How it Works
 
 Once installed, RommDeck runs a background service that syncs your saves on schedule, as well as when emulators are opened and closed. Any time a game is opened or closed, a sync runs if your settings allow it. The RommDeck app is your single pane of glass to do everything. Download games, browse collections, sync saves, resolve conflicts, and more. When you download a game, RommDeck downloads any required firmware and files, as well as any saves associated.
 
