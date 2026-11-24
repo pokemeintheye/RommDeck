@@ -634,6 +634,43 @@ int bundle_zip(const bundle *b, const char *zip_path) {
     return rc;
 }
 
+/* xemu's Webstation broker archives saves from its host-side staging tree.
+ * The common root is "saves", then E: relative UDATA/<title id>/... .
+ * Unlike our ordinary Xbox units, these bytes are restored by the broker
+ * path-for-path, without its declared-import mapper.
+ * The broker accepts archives without a manifest (older dumps have none). */
+int bundle_zip_xemu_broker(const bundle *b, const char *zip_path) {
+    if (strcmp(b->layout, "xbox") != 0 || b->n <= 0) return -1;
+    zip_member *m = calloc((size_t)b->n, sizeof *m);
+    char (*names)[640] = calloc((size_t)b->n, sizeof *names);
+    if (!m || !names) {
+        free(m);
+        free(names);
+        return -1;
+    }
+    int rc = 0;
+    for (int i = 0; i < b->n; i++) {
+        const char *name = b->files[i].name;
+        size_t idlen = strlen(b->game_id);
+        if (strncasecmp(name, b->game_id, idlen) != 0 || name[idlen] != '/' ||
+            strstr(name, "../") || name[0] == '/') {
+            rc = -1;
+            break;
+        }
+        int n = snprintf(names[i], sizeof names[i], "saves/UDATA/%s", name);
+        if (n < 0 || (size_t)n >= sizeof names[i]) {
+            rc = -1;
+            break;
+        }
+        m[i].path = b->files[i].path;
+        m[i].name = names[i];
+    }
+    if (!rc) rc = zip_write(zip_path, m, b->n);
+    free(names);
+    free(m);
+    return rc;
+}
+
 /* The folder named name somewhere below dir (at most depth levels down),
  * whose parent is called parent when that's given. */
 static int find_dir(const char *dir, const char *name, const char *parent, int depth, char *out, size_t n) {
@@ -728,6 +765,39 @@ static int place_unpacked(bundle *b, const char *tmp) {
         return put_folder(dir_exists(src) ? src : tmp, b->dir);
     }
     if (!strcmp(b->layout, "xbox")) {
+        /* A Webstation-native archive is rooted at saves/UDATA/<title id>.
+         * Reject anything outside this title's UDATA rather than quietly
+         * dropping TDATA or placing another game's data. No image is changed
+         * on an unsupported archive. Legacy title-rooted zips still work. */
+        char broker_root[PATH_MAX_LEN];
+        path_join(broker_root, sizeof broker_root, tmp, "saves");
+        if (dir_exists(broker_root)) {
+            char udata[PATH_MAX_LEN], id_name[GAME_ID_MAX] = "";
+            DIR *d = opendir(broker_root);
+            struct dirent *de;
+            int bad = 0;
+            while (d && (de = readdir(d))) {
+                if (de->d_name[0] == '.') continue;
+                if (strcasecmp(de->d_name, "UDATA") != 0) bad = 1;
+            }
+            if (d) closedir(d);
+            if (bad) return -2;
+            path_join(udata, sizeof udata, broker_root, "UDATA");
+            d = opendir(udata);
+            while (d && (de = readdir(d))) {
+                if (de->d_name[0] == '.') continue;
+                if (strcasecmp(de->d_name, b->game_id) != 0) bad = 1;
+                else str_copy(id_name, sizeof id_name, de->d_name);
+            }
+            if (d) closedir(d);
+            if (bad || !id_name[0]) return -2;
+            path_join(src, sizeof src, udata, id_name);
+            if (!dir_exists(src)) return -2;
+            if (dir_exists(b->base)) return put_folder(src, b->dir);
+            const int rc = xhdd_put_save_file(b->base, b->game_id, src);
+            if (rc == 0) remove_tree(b->dir);
+            return rc;
+        }
         /* "<title id>/..." in any case, or the folder's contents; onto the
          * image, and the copy here goes so it's made again. */
         DIR *d = opendir(tmp);
