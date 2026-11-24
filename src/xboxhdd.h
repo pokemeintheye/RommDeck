@@ -17,10 +17,15 @@ void xhdd_close(xhdd *h);
  * keeping its time on the disk. 1 when copied, 0 when the game has no save,
  * -1 when the disk can't be read. */
 int xhdd_get_save(xhdd *h, const char *id, const char *dir);
+/* Read either title-scoped tree of E:, UDATA or TDATA, into dir/<id>/... . */
+int xhdd_get_save_tree(xhdd *h, const char *tree, const char *id, const char *dir);
 
 /* E:\UDATA\<id> on the image becomes the folder from (the save folder
  * itself, not its parent). The image is changed as a copy that replaces it
  * when all went in; on failure it's as it was. Never while xemu runs. */
 int xhdd_put_save_file(const char *image, const char *id, const char *from);
+/* Replace the supplied UDATA and/or TDATA title folders in one atomic image
+ * replacement. NULL means preserve that tree, not remove it. */
+int xhdd_put_save_parts_file(const char *image, const char *id, const char *udata_from, const char *tdata_from);
 
 #endif
