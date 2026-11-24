@@ -167,6 +167,13 @@ static void wiiu_account(const char *base, char out[16]) {
     free(xml);
 }
 
+/* Match the opt-in used by sync.c. TDATA must be included only when
+ * publishing a broker archive, never in RommDeck's legacy Xbox save unit. */
+static int xbox_broker_opt_in(void) {
+    const char *v = getenv("ROMM_XEMU_WEBSTATION_ARCHIVES");
+    return v && (!strcmp(v, "1") || !strcasecmp(v, "true"));
+}
+
 /* The game's save, copied out of the Xbox hard disk image into b->dir. The
  * copy is made again only when the image has changed since: ".image" in it
  * says which version it came from. No image (""): the copy as it is. */
@@ -181,7 +188,13 @@ static void xbox_copy_out(bundle *b, const char *image) {
     if (fresh || !image[0] || file_size(image) < 0) return;
     remove_tree(b->dir);
     xhdd *h = xhdd_open(image, 0);
-    const int rc = h ? xhdd_get_save(h, b->game_id, b->dir) : -1;
+    int rc = h ? xhdd_get_save(h, b->game_id, b->dir) : -1;
+    if (h && rc >= 0 && xbox_broker_opt_in()) {
+        char tdata[PATH_MAX_LEN];
+        path_join(tdata, sizeof tdata, b->dir, "TDATA");
+        const int trc = xhdd_get_save_tree(h, "TDATA", b->game_id, tdata);
+        if (trc < 0) rc = -1;
+    }
     xhdd_close(h);
     if (rc < 0) {
         remove_tree(b->dir); /* tried again next time */
@@ -273,6 +286,16 @@ static void xbox_folders(bundle *b, const char *hdd) {
     }
     path_join(b->dir, sizeof b->dir, udata, name);
     add_tree(b, b->dir, name, 0);
+    if (xbox_broker_opt_in()) {
+        char tbase[PATH_MAX_LEN], tname[24];
+        path_join(tbase, sizeof tbase, e, "TDATA");
+        if (name_ci(tbase, b->game_id, tname, sizeof tname) == 0) {
+            char tdir[PATH_MAX_LEN], prefix[64];
+            path_join(tdir, sizeof tdir, tbase, tname);
+            snprintf(prefix, sizeof prefix, "TDATA/%s", tname);
+            add_tree(b, tdir, prefix, 0);
+        }
+    }
     /* The copy an image needed (xbox_copy_out) is just clutter from here on,
      * and so is its folder once the last one's gone. */
     snprintf(copy, sizeof copy, "%s/xbox/%s", plat_data_dir(), b->game_id);
@@ -652,12 +675,18 @@ int bundle_zip_xemu_broker(const bundle *b, const char *zip_path) {
     for (int i = 0; i < b->n; i++) {
         const char *name = b->files[i].name;
         size_t idlen = strlen(b->game_id);
-        if (strncasecmp(name, b->game_id, idlen) != 0 || name[idlen] != '/' ||
-            strstr(name, "../") || name[0] == '/') {
+        const char *part = "UDATA";
+        const char *rel = name;
+        if (!strncasecmp(name, "TDATA/", 6)) {
+            part = "TDATA";
+            rel = name + 6;
+        }
+        if (strncasecmp(rel, b->game_id, idlen) != 0 || rel[idlen] != '/' ||
+            strstr(rel, "../") || rel[0] == '/') {
             rc = -1;
             break;
         }
-        int n = snprintf(names[i], sizeof names[i], "saves/UDATA/%s", name);
+        int n = snprintf(names[i], sizeof names[i], "saves/%s/%s", part, rel);
         if (n < 0 || (size_t)n >= sizeof names[i]) {
             rc = -1;
             break;
@@ -765,36 +794,44 @@ static int place_unpacked(bundle *b, const char *tmp) {
         return put_folder(dir_exists(src) ? src : tmp, b->dir);
     }
     if (!strcmp(b->layout, "xbox")) {
-        /* A Webstation-native archive is rooted at saves/UDATA/<title id>.
-         * Reject anything outside this title's UDATA rather than quietly
-         * dropping TDATA or placing another game's data. No image is changed
-         * on an unsupported archive. Legacy title-rooted zips still work. */
+        /* Broker saves: saves/UDATA/<id> and/or saves/TDATA/<id>.
+         * Validate both trees and the title ID before any HDD write.
+         * Never silently drop TDATA or another title's save. */
         char broker_root[PATH_MAX_LEN];
         path_join(broker_root, sizeof broker_root, tmp, "saves");
         if (dir_exists(broker_root)) {
-            char udata[PATH_MAX_LEN], id_name[GAME_ID_MAX] = "";
+            char parts[2][PATH_MAX_LEN] = {{0}}, actual[2][GAME_ID_MAX] = {{0}};
+            const char *tops[2] = {"UDATA", "TDATA"};
+            int bad = 0;
             DIR *d = opendir(broker_root);
             struct dirent *de;
-            int bad = 0;
             while (d && (de = readdir(d))) {
                 if (de->d_name[0] == '.') continue;
-                if (strcasecmp(de->d_name, "UDATA") != 0) bad = 1;
+                if (strcasecmp(de->d_name, "UDATA") && strcasecmp(de->d_name, "TDATA")) bad = 1;
             }
             if (d) closedir(d);
-            if (bad) return -2;
-            path_join(udata, sizeof udata, broker_root, "UDATA");
-            d = opendir(udata);
-            while (d && (de = readdir(d))) {
-                if (de->d_name[0] == '.') continue;
-                if (strcasecmp(de->d_name, b->game_id) != 0) bad = 1;
-                else str_copy(id_name, sizeof id_name, de->d_name);
+            for (int k = 0; k < 2; k++) {
+                char root[PATH_MAX_LEN];
+                path_join(root, sizeof root, broker_root, tops[k]);
+                d = opendir(root);
+                while (d && (de = readdir(d))) {
+                    if (de->d_name[0] == '.') continue;
+                    if (strcasecmp(de->d_name, b->game_id) != 0 || actual[k][0]) bad = 1;
+                    else str_copy(actual[k], sizeof actual[k], de->d_name);
+                }
+                if (d) closedir(d);
+                if (actual[k][0]) path_join(parts[k], sizeof parts[k], root, actual[k]);
             }
-            if (d) closedir(d);
-            if (bad || !id_name[0]) return -2;
-            path_join(src, sizeof src, udata, id_name);
-            if (!dir_exists(src)) return -2;
-            if (dir_exists(b->base)) return put_folder(src, b->dir);
-            const int rc = xhdd_put_save_file(b->base, b->game_id, src);
+            if (bad || (!parts[0][0] && !parts[1][0])) return -2;
+            if (dir_exists(b->base)) {
+                /* The directory-backed Xbox emulators cannot swap two save
+                 * trees atomically; refuse rather than risk half a restore. */
+                if (parts[1][0]) return -2;
+                return put_folder(parts[0], b->dir);
+            }
+            const int rc = xhdd_put_save_parts_file(b->base, b->game_id,
+                                                   parts[0][0] ? parts[0] : NULL,
+                                                   parts[1][0] ? parts[1] : NULL);
             if (rc == 0) remove_tree(b->dir);
             return rc;
         }
