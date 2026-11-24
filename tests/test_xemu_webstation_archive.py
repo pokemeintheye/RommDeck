@@ -27,7 +27,7 @@ class XboxArchiveTests(unittest.TestCase):
 
     def test_upload_broker_root_and_manifest(self):
         output = inspect(rommdeck_to_webstation(self.raw, '54430003'))
-        self.assertEqual(output['UDATA/54430003/ABC/save0'], b'progress')
+        self.assertEqual(output['saves/UDATA/54430003/ABC/save0'], b'progress')
         manifest = json.loads(output['.broker-manifest.json'])
         self.assertEqual(manifest['version'], 1)
         self.assertEqual(manifest['session']['emulator'], 'xemu')
@@ -43,7 +43,7 @@ class XboxArchiveTests(unittest.TestCase):
 
     def test_refuses_tdata_loss(self):
         with self.assertRaises(UnsafeArchive):
-            webstation_to_rommdeck(makezip({'TDATA/54430003/cache': b'important'}), '54430003')
+            webstation_to_rommdeck(makezip({'saves/TDATA/54430003/cache': b'important'}), '54430003')
 
     def test_refuses_traversal(self):
         with self.assertRaises(UnsafeArchive):
