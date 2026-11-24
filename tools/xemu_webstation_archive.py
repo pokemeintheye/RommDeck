@@ -59,7 +59,7 @@ def rommdeck_to_webstation(data: bytes, title_id: str) -> bytes:
         parts = name.split('/')
         if len(parts) < 2 or parts[0].lower() != title_id.lower():
             raise UnsafeArchive(f'Expected title-ID-rooted member, got {name!r}')
-        result['UDATA/' + name] = content
+        result['saves/UDATA/' + name] = content
     manifest = {
         'version': 1,
         'created_at': time.time(),
@@ -80,8 +80,8 @@ def webstation_to_rommdeck(data: bytes, title_id: str) -> bytes:
         if name == MANIFEST:
             continue
         parts = name.split('/')
-        if len(parts) >= 3 and parts[0].upper() == 'UDATA' and parts[1].lower() == title_id.lower():
-            result['/'.join(parts[1:])] = content
+        if len(parts) >= 4 and parts[0] == 'saves' and parts[1].upper() == 'UDATA' and parts[2].lower() == title_id.lower():
+            result['/'.join(parts[2:])] = content
         else:
             raise UnsafeArchive(f'Not safely representable by RommDeck UDATA layout: {name!r}')
     if not result:
