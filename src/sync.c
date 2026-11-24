@@ -2688,7 +2688,7 @@ static void fill_bundle_file(local_file *f, const scan_ctx *c, const local_rom *
         ps2_hash_for_romm(r, identity, f->hash);
     } else if (!strcmp(r->map->save_layout, "psp") || !strcmp(r->map->save_layout, "ps3")) {
         snprintf(f->upload_name, sizeof f->upload_name, "%s.zip", b->game_id);
-    } else if (!strcmp(r->map->save_layout, "xbox") && xemu_broker_saves_enabled()) {
+    } else if (!strcmp(r->map->save_layout, "xbox") && !strcasecmp(r->map->emulator, "xemu") && xemu_broker_saves_enabled()) {
         snprintf(f->upload_name, sizeof f->upload_name, "%s.saves.zip", b->game_id);
     } else if (!strcmp(r->map->save_layout, "switch") || !strcmp(r->map->save_layout, "ryujinx") || !strcmp(r->map->save_layout, "xbox") ||
                !strcmp(r->map->save_layout, "x360") || !strcmp(r->map->save_layout, "psvita") ||
@@ -3326,7 +3326,7 @@ static int do_upload(const scan_ctx *c, const local_file *f, int session_id, int
         snprintf(zip, sizeof zip, "%s/tmp/upload-%d.zip", plat_data_dir(), f->rom_id);
         int zipped = -1;
         if (bundle_reopen(f, &b) != 0 ||
-            (zipped = (xemu_broker_saves_enabled() && !strcmp(f->map->save_layout, "xbox")
+            (zipped = (xemu_broker_saves_enabled() && !strcmp(f->map->save_layout, "xbox") && !strcasecmp(f->map->emulator, "xemu")
                 ? bundle_zip_xemu_broker(&b, zip) : bundle_zip(&b, zip))) != 0) {
             bundle_free(&b);
             /* Too big for a zip is too big for RomM: the same as its 413. */
