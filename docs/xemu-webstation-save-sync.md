@@ -8,7 +8,7 @@ RommDeck currently uploads Xbox saves rooted at `<title-id>/...`, but Webstation
 
 ## Prototype
 
-`tools/xemu_webstation_archive.py` can convert a single-game RommDeck ZIP to a broker-layout ZIP and convert UDATA-only broker archives back. This tool is for isolated tests; it is not invoked by the sync engine.
+`tools/xemu_webstation_archive.py` can convert a single-game RommDeck ZIP to a broker-layout ZIP rooted under \`saves/\` and convert UDATA-only broker archives back. This tool is for isolated tests; it is not invoked by the sync engine.
 
 Run `python3 -m unittest discover -s tests -p 'test_xemu_webstation_archive.py' -v`.
 
