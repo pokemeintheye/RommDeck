@@ -41,9 +41,17 @@ class XboxArchiveTests(unittest.TestCase):
         with self.assertRaises(UnsafeArchive):
             rommdeck_to_webstation(self.raw, '4d530021')
 
-    def test_refuses_tdata_loss(self):
+    def test_round_trip_tdata(self):
+        contents = dict(self.contents)
+        contents['TDATA/54430003/config/cache.bin'] = b'important'
+        original = makezip(contents)
+        webstation = rommdeck_to_webstation(original, '54430003')
+        self.assertEqual(inspect(webstation)['saves/TDATA/54430003/config/cache.bin'], b'important')
+        self.assertEqual(inspect(webstation_to_rommdeck(webstation, '54430003')), contents)
+
+    def test_refuses_other_game_tdata(self):
         with self.assertRaises(UnsafeArchive):
-            webstation_to_rommdeck(makezip({'saves/TDATA/54430003/cache': b'important'}), '54430003')
+            webstation_to_rommdeck(makezip({'saves/TDATA/4d530021/cache': b'foreign'}), '54430003')
 
     def test_refuses_traversal(self):
         with self.assertRaises(UnsafeArchive):
