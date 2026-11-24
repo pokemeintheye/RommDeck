@@ -181,7 +181,8 @@ static void xbox_copy_out(bundle *b, const char *image) {
     char stamp[PATH_MAX_LEN], now[64];
     snprintf(b->dir, sizeof b->dir, "%s/xbox/%s", plat_data_dir(), b->game_id);
     path_join(stamp, sizeof stamp, b->dir, ".image");
-    snprintf(now, sizeof now, "%lld %lld", (long long)file_mtime_ns(image), (long long)file_size(image));
+    snprintf(now, sizeof now, "%lld %lld %s", (long long)file_mtime_ns(image),
+             (long long)file_size(image), xbox_broker_opt_in() ? "broker" : "legacy");
     char *had = read_file(stamp, NULL);
     const int fresh = had && !strcmp(had, now);
     free(had);
@@ -454,7 +455,21 @@ int bundle_open(bundle *b, const char *layout, const char *id, const char *also,
             xbox_folders(b, base);
         } else {
             xbox_copy_out(b, base);
-            add_tree(b, b->dir, "", 0);
+            if (xbox_broker_opt_in()) {
+                add_tree(b, b->dir, "", 0);
+            } else {
+                /* A cache created in broker mode can contain TDATA. Never
+                 * ship it accidentally in a legacy title-rooted ZIP. */
+                DIR *d = opendir(b->dir);
+                struct dirent *de;
+                while (d && (de = readdir(d))) {
+                    if (strcasecmp(de->d_name, b->game_id) != 0) continue;
+                    char path[PATH_MAX_LEN];
+                    path_join(path, sizeof path, b->dir, de->d_name);
+                    if (dir_exists(path)) add_tree(b, path, de->d_name, 0);
+                }
+                if (d) closedir(d);
+            }
         }
     } else if (!strcmp(layout, "x360")) {
         /* <title id>/00000001 (saved games) and its headers under the player's
