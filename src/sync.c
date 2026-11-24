@@ -3371,7 +3371,15 @@ static int do_upload(const scan_ctx *c, const local_file *f, int session_id, int
         else unlink(card_up);
     }
     if (ok) {
-        record_save(f, (int)jget_num(j, "id", 0), jget_str(j, "content_hash", f->hash), jget_str(j, "content_hash", ""));
+        /* A broker-style Xbox ZIP has different member paths than the local
+         * title-rooted bundle. Keep the local hash in sync history and the
+         * server's different hash separately, or the next scan thinks this
+         * device modified its save despite no change to its files. */
+        const int broker_xbox = f->is_bundle && !strcmp(f->map->save_layout, "xbox") &&
+            !strcasecmp(f->map->emulator, "xemu") && xemu_broker_saves_enabled();
+        record_save(f, (int)jget_num(j, "id", 0),
+                    broker_xbox ? f->hash : jget_str(j, "content_hash", f->hash),
+                    jget_str(j, "content_hash", ""));
         if (ps2_sent[0]) ps2_note_synced(f->rom, ps2_sent, jget_str(j, "content_hash", f->hash));
         LOGI("uploaded %s (rom %d, slot %s)", f->path, f->rom_id, f->slot);
     }
