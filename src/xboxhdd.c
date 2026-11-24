@@ -320,9 +320,10 @@ static int copy_out(xhdd *h, uint32_t first, const char *to, int depth) {
     return rc;
 }
 
-int xhdd_get_save(xhdd *h, const char *id, const char *dir) {
+int xhdd_get_save_tree(xhdd *h, const char *tree, const char *id, const char *dir) {
+    if (strcmp(tree, "UDATA") != 0 && strcmp(tree, "TDATA") != 0) return -1;
     unsigned char *top = NULL, *udata = NULL;
-    int rc = -1, at = find_entry(h, h->root, "UDATA", &top);
+    int rc = -1, at = find_entry(h, h->root, tree, &top);
     if (!top) goto out;
     rc = 0;
     if (at < 0 || !(top[at * DIRENT + 1] & ATTR_DIR)) goto out;
@@ -341,6 +342,10 @@ out:
     free(top);
     free(udata);
     return rc;
+}
+
+int xhdd_get_save(xhdd *h, const char *id, const char *dir) {
+    return xhdd_get_save_tree(h, "UDATA", id, dir);
 }
 
 /* ---- Writing ----
@@ -681,7 +686,7 @@ static int fat_flush(xhdd *h) {
 }
 
 /* E:\UDATA\<id> becomes the folder from: the old one's clusters are freed. */
-static int put_save(xhdd *h, const char *id, const char *from) {
+static int put_save(xhdd *h, const char *tree, const char *id, const char *from) {
     unsigned char *top = NULL, *udata = NULL, e[DIRENT];
     int rc = -1, at = find_entry(h, h->root, "UDATA", &top);
     uint32_t ud = 0, save = 0;
@@ -695,7 +700,7 @@ static int put_save(xhdd *h, const char *id, const char *from) {
         memset(blank, 0xFF, h->ccs);
         const int w = disk_write(h, cluster_at(h, ud), blank, h->ccs);
         free(blank);
-        make_entry(e, "UDATA", 1, ud, 0, time(NULL));
+        make_entry(e, tree, 1, ud, 0, time(NULL));
         if (w != 0 || add_entry(h, h->root, e) != 0) goto out;
     }
     /* Named as the zip has it, so its hash stays RomM's (FATX doesn't mind
@@ -724,7 +729,8 @@ out:
     return rc;
 }
 
-int xhdd_put_save_file(const char *image, const char *id, const char *from) {
+int xhdd_put_save_parts_file(const char *image, const char *id, const char *udata_from, const char *tdata_from) {
+    if (!udata_from && !tdata_from) return -1;
     char tmp[PATH_MAX_LEN + 8];
     snprintf(tmp, sizeof tmp, "%s.romm", image);
     unlink(tmp);
@@ -738,14 +744,22 @@ int xhdd_put_save_file(const char *image, const char *id, const char *from) {
     if (h) {
         struct stat st;
         h->eof = fstat(h->fd, &st) == 0 ? ((uint64_t)st.st_size + h->cs - 1) & ~(h->cs - 1) : 0;
-        rc = h->eof || !h->qcow ? put_save(h, id, from) : -1;
+        if (h->eof || !h->qcow) {
+            rc = 0;
+            if (udata_from) rc = put_save(h, "UDATA", id, udata_from);
+            if (rc == 0 && tdata_from) rc = put_save(h, "TDATA", id, tdata_from);
+        }
         if (rc == 0 && fsync(h->fd) != 0) rc = -1;
         xhdd_close(h);
     }
     if (rc == 0 && rename(tmp, image) != 0) rc = -1;
     if (rc != 0) {
-        LOGE("xbox: couldn't put the save %s on the hard disk; it's as it was", id);
+        LOGE("xbox: couldn't restore the save %s on the hard disk; it's as it was", id);
         unlink(tmp);
     }
     return rc;
+}
+
+int xhdd_put_save_file(const char *image, const char *id, const char *from) {
+    return xhdd_put_save_parts_file(image, id, from, NULL);
 }
