@@ -23,10 +23,21 @@ jobs:
       # The Steam Deck native binary above is still compiled as the C check.
       - name: Run Xbox archive adapter tests
         run: python3 -m unittest discover -s tests -p 'test_xemu_webstation_archive.py' -v
-      - name: Save Steam Deck test binary (not a release)
+      - name: Validate local deploy and rollback scripts
+        run: |
+          bash -n tools/xemu-test-deploy/Install-RommDeck-Test.sh
+          bash -n tools/xemu-test-deploy/Restore-Original-RommDeck.sh
+      - name: Package Steam Deck test installer (not a release)
+        run: |
+          mkdir -p build/xemu-test-installer
+          cp build/steamdeck/romm-sync build/xemu-test-installer/romm-sync
+          cp tools/xemu-test-deploy/* build/xemu-test-installer/
+          chmod +x build/xemu-test-installer/*.sh build/xemu-test-installer/*.desktop
+          (cd build/xemu-test-installer && sha256sum romm-sync > romm-sync.sha256)
+      - name: Save one-click Steam Deck test kit
         uses: actions/upload-artifact@v4
         with:
-          name: rommdeck-xemu-webstation-test-linux-x86_64
-          path: build/steamdeck/romm-sync
+          name: rommdeck-xemu-webstation-steamdeck-installer
+          path: build/xemu-test-installer/
           if-no-files-found: error
           retention-days: 7
