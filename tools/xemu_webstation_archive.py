@@ -13,7 +13,7 @@ import time
 import zipfile
 from pathlib import PurePosixPath, Path
 
-TITLE = re.compile(r"[0-9a-fA-F]{8}\\Z")
+TITLE = re.compile(r"[0-9a-fA-F]{8}\Z")
 MANIFEST = '.broker-manifest.json'
 
 
@@ -29,7 +29,7 @@ def _entries(data: bytes) -> dict[str, bytes]:
                 continue
             name = item.filename
             parts = PurePosixPath(name).parts
-            if (not name or '\\\\' in name or name.startswith('/') or
+            if (not name or '\\' in name or name.startswith('/') or
                 any(part in ('', '.', '..') for part in name.split('/')) or
                 any(part.startswith('.') for part in parts if part != MANIFEST)):
                 raise UnsafeArchive(f'Unsafe archive member: {name!r}')
