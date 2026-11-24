@@ -1,21 +1,40 @@
-# Experimental xemu ↔ Webstation save-archive adapter
+# Experimental Xbox xemu ↔ Webstation save sync
 
-This branch is **not ready for deployment**. No production RommDeck synchronization code is modified yet.
+**Development branch, not a release. Do not enable on a live Steam Deck until the native build and end-to-end restore have been verified with backup saves.**
 
-## Why
+## Implemented
 
-RommDeck currently uploads Xbox saves rooted at `<title-id>/...`, but Webstation's broker-native restore files contain `UDATA/<title-id>/...` and can also contain `TDATA/...`. RomM's selection logic additionally uses the `.saves.zip` filename suffix to distinguish broker-native archives.
+- RommDeck's C synchronization engine has an explicit opt-in: `ROMM_XEMU_WEBSTATION_ARCHIVES=1`.
+- For **xemu** / `xbox` profiles only, new uploads use the `<title-id>.saves.zip` filename and the broker's **`saves/UDATA/<title-id>/...`** ZIP members.
+- The existing RommDeck format remains the default for uploads when the variable is unset.
+- The downloader supports both RommDeck's legacy title-ID-rooted ZIP format and native Webstation `saves/UDATA/<title-id>/...` ZIPs.
+- An incoming broker archive containing `TDATA`, another title's directory, or otherwise unsupported data is **rejected before modifying the xemu disk image**. It is not silently truncated.
+- This path uses the existing extraction, backups, image-not-running guard and sync conflict-resolution logic. Nothing is written to the Unraid host by this branch.
 
-## Prototype
+## Not yet supported
 
-`tools/xemu_webstation_archive.py` can convert a single-game RommDeck ZIP to a broker-layout ZIP rooted under \`saves/\` and convert UDATA-only broker archives back. This tool is for isolated tests; it is not invoked by the sync engine.
+- Native Webstation exports containing Xbox `TDATA`. RommDeck's current xemu extractor uses `UDATA`; further Xbox HDD work is required to synchronize `TDATA` safely.
+- A verified end-to-end test with the user's broker build and production RomM configuration.
+- Verified native build/test workflow result.
 
-Run `python3 -m unittest discover -s tests -p 'test_xemu_webstation_archive.py' -v`.
+## Tests
 
-## Required before wiring into RommDeck
+The Python reference converter has five synthetic unit tests:
 
-- Validate acceptance by the exact broker release and RomM save metadata API.
-- Handle `TDATA` without loss; the current prototype deliberately rejects it on download.
-- Preserve RommDeck's hash, timestamp, conflict-resolution and legacy save semantics.
-- Verify real Steam Deck → RomM → Webstation → RomM → Steam Deck round trips using backups and a test game.
-- Never modify an open xemu disk image.
+```powershell
+python -m unittest discover -s tests -p "test_xemu_webstation_archive.py" -v
+```
+
+They do not exercise the C synchronization engine. The branch adds a GitHub Actions workflow that attempts `make host`, `make unit`, and those reference tests; verify that it has completed successfully before deploying.
+
+## Safe manual test plan (after compilation)
+
+1. Back up the Steam Deck's xemu HDD image and copy the save ZIP from RomM.
+2. Use a disposable RomM test installation and a test game, not existing progress.
+3. Opt in with `ROMM_XEMU_WEBSTATION_ARCHIVES=1` in the RommDeck service's **test** environment only.
+4. Launch xemu, save, close it normally, then sync and confirm a `.saves.zip` upload whose entries begin `saves/UDATA/<title-id>/`.
+5. Launch in Webstation and confirm the game reads it; save, exit, sync down, then verify the original data persists on the Deck.
+6. Verify a Webstation ZIP with `saves/TDATA/` is safely refused without altering the Xbox HDD.
+7. Verify another Xbox game and older `<title-id>.zip` remain readable.
+
+This is a draft PR. No change should be merged until the tests and real round trip pass.
