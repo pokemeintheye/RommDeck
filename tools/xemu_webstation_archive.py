@@ -1,7 +1,7 @@
 """Reference Xbox save archive adapter for RommDeck/Webstation.
 
-This is a diagnostic tool, NOT wired into RommDeck synchronization. It deliberately
-rejects Xbox TDATA and unsafe or ambiguous inputs rather than silently losing saves.
+This is a diagnostic tool; the native C implementation is used for synchronization.
+It refuses unsafe or ambiguous inputs rather than silently losing saves.
 """
 from __future__ import annotations
 
@@ -57,9 +57,14 @@ def rommdeck_to_webstation(data: bytes, title_id: str) -> bytes:
     result = {}
     for name, content in members.items():
         parts = name.split('/')
-        if len(parts) < 2 or parts[0].lower() != title_id.lower():
-            raise UnsafeArchive(f'Expected title-ID-rooted member, got {name!r}')
-        result['saves/UDATA/' + name] = content
+        if parts[0] == 'TDATA':
+            if len(parts) < 3 or parts[1].lower() != title_id.lower():
+                raise UnsafeArchive(f'Expected TDATA/title-ID member, got {name!r}')
+            result['saves/' + name] = content
+        elif len(parts) >= 2 and parts[0].lower() == title_id.lower():
+            result['saves/UDATA/' + name] = content
+        else:
+            raise UnsafeArchive(f'Expected title-ID-rooted or TDATA member, got {name!r}')
     manifest = {
         'version': 1,
         'created_at': time.time(),
@@ -80,10 +85,13 @@ def webstation_to_rommdeck(data: bytes, title_id: str) -> bytes:
         if name == MANIFEST:
             continue
         parts = name.split('/')
-        if len(parts) >= 4 and parts[0] == 'saves' and parts[1].upper() == 'UDATA' and parts[2].lower() == title_id.lower():
-            result['/'.join(parts[2:])] = content
+        if len(parts) >= 4 and parts[0] == 'saves' and parts[1].upper() in ('UDATA', 'TDATA') and parts[2].lower() == title_id.lower():
+            relative = '/'.join(parts[2:])
+            if parts[1].upper() == 'TDATA':
+                relative = 'TDATA/' + relative
+            result[relative] = content
         else:
-            raise UnsafeArchive(f'Not safely representable by RommDeck UDATA layout: {name!r}')
+            raise UnsafeArchive(f'Not safely representable by RommDeck Xbox layout: {name!r}')
     if not result:
         raise UnsafeArchive('No UDATA save for requested title')
     return _write(result)
