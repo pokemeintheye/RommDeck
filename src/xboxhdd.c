@@ -688,7 +688,7 @@ static int fat_flush(xhdd *h) {
 /* E:\UDATA\<id> becomes the folder from: the old one's clusters are freed. */
 static int put_save(xhdd *h, const char *tree, const char *id, const char *from) {
     unsigned char *top = NULL, *udata = NULL, e[DIRENT];
-    int rc = -1, at = find_entry(h, h->root, "UDATA", &top);
+    int rc = -1, at = find_entry(h, h->root, tree, &top);
     uint32_t ud = 0, save = 0;
     if (!top) goto out;
     if (at >= 0 && (top[at * DIRENT + 1] & ATTR_DIR)) {
