@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Restore Original RommDeck
+Comment=Restore saved RommDeck sync service
+Exec=/usr/bin/env bash -c "exec /usr/bin/env bash \"$(dirname \"$0\")/Restore-Original-RommDeck.sh\"" %k
+Terminal=true
+Icon=edit-undo
+Categories=Utility;

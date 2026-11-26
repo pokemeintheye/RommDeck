@@ -109,6 +109,8 @@ int bundle_device_only(const bundle *b);
  * and clears it after. 1 or 0; -1 for a bad zip. */
 int bundle_zip_has_user(const bundle *b, const char *zip_path, const char *tmp_dir);
 int bundle_zip(const bundle *b, const char *zip_path);
+/* Experimental xemu/Webstation: emit broker-native saves/UDATA/<title>/... paths. */
+int bundle_zip_xemu_broker(const bundle *b, const char *zip_path);
 /* Replaces the bundle's files with the zip's contents. -1 for a zip it
  * can't use, -2 for one holding none of the game's saves (psvita, ps4,
  * folder: other games' folders; scummvm: no file of the target's), with

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install RommDeck Xbox Test
+Comment=Deploy experimental Xbox save sync service (with rollback)
+Exec=/usr/bin/env bash -c "exec /usr/bin/env bash \"$(dirname \"$0\")/Install-RommDeck-Test.sh\"" %k
+Terminal=true
+Icon=system-software-install
+Categories=Utility;
